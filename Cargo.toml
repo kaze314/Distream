@@ -1,0 +1,24 @@
+[package]
+name = "distream"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ac-ffmpeg = "0.19.0"
+bytes = "1"
+
+
+srt-tokio = "0.4.4"
+anyhow = "1.0.100"
+log = "0.4.29"
+pretty_env_logger = "0.5.0"
+sha2 = "0.11.0-rc.3"
+serde = { version = "1.0.228", features = ["derive"] }
+
+[dependencies.tokio]
+features = ["full", "net", "time", "test-util", "macros", "io-util", "io-std", "sync"]
+version = "1"
+
+[dependencies.tokio-stream]
+features = ["sync"]
+version = "0.1"

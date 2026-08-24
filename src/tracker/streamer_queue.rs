@@ -5,7 +5,7 @@ pub struct StreamerQueue<T> {
     queue: Vec<(usize, T)>
 }
 
-impl<T: Clone> StreamerQueue<T> {
+impl<T> StreamerQueue<T> {
     pub fn new(max_repeats: usize) -> StreamerQueue<T> {
         StreamerQueue {
             index: 0,
@@ -20,16 +20,17 @@ impl<T: Clone> StreamerQueue<T> {
 
     // It's not guaranteed there will be enough streamers, so
     // instead of permanently removing a streamer from the queue, keep it.
-    // If there are not enough streamers for the demand repeat the queue.
+    // If there are not enough streamers for the demand, repeat the queue.
     pub fn pop_front(&mut self) -> Option<&T> {
         let queue_len = self.queue.len();
         if let Some(entry) = self.queue.get_mut(self.index) {
             entry.0 += 1;
 
-            // Update repeats.
+            // Update repeats counter.
             // If the streamer has reached the
             // max repeats increment the index.
-            if entry.0 >= self.index {
+            if entry.0 >= self.max_repeats {
+                entry.0 = 0;
                 self.index += 1;
                 if self.index >= queue_len {
                     self.index = 0;

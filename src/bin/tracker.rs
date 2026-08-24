@@ -1,44 +1,36 @@
-use std::sync::{Arc, Mutex};
+
 use tokio::net::{TcpListener, TcpStream};
-use tokio::io::{AsyncWriteExt, AsyncReadExt};
-use distream::media_server::media_server_data::DistreamServerData;
-use distream::tracker::tracker_data::TrackerData;
+use distream::tracker::tracker_manager::TrackerManager;
+use distream::tracker::tracker_service::TrackerService;
+
+use distream::tracker::tracker_connection;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Bind to the standard port 3334
     let listener = TcpListener::bind("0.0.0.0:3334").await?;
     println!("Server running on port 3334");
-    let tracker_data = Arc::new(Mutex::new(TrackerData::new()));
-    
+
+
+    let tracker_data = TrackerManager::new();
+    let tracker_service = TrackerService::from(tracker_data);
+    let sender = tracker_service.sender.clone();
+
+    // Start the tracker service
+    tokio::spawn( async move { tracker_service.run().await });
+
+
+    // Handle incoming connections
     loop {
         let (socket, addr) = listener.accept().await?;
         println!("New connection: {addr}");
-        
-        let tracker_data_clone = tracker_data.clone();
+
+        let sender_clone =  sender.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(socket, tracker_data_clone).await {
+            if let Err(e) = tracker_connection::handle_connection(socket, sender_clone).await {
                 println!("Connection error: {e}");
             }
         });
     }
 }
 
-async fn handle_connection(
-    mut socket: tokio::net::TcpStream,
-    tracker_data: Arc<Mutex<TrackerData>>
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut buffer = [0; 1024];
-
-    loop {
-        let n = socket.read(&mut buffer).await?;
-
-        if n == 0 {
-            println!("Client disconnected");
-            return Ok(());
-        }
-
-        println!("Received: {:?}", &buffer[..n]);
-
-        socket.write_all(b"Message received\n").await?;
-    }
-}
