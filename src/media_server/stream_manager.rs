@@ -1,5 +1,8 @@
+use std::collections::HashMap;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::Receiver;
+use crate::media_server::media_data::{HashKey, StreamBite, IP};
+use crate::media_server::settings::Settings;
 use crate::tracker::tracker_manager;
 
 pub enum ServerEvent {
@@ -11,6 +14,23 @@ pub enum ServerEvent {
         stream: String,
         chunk: Vec<u8>,
     },
+}
+
+struct StreamManager {
+    stream_bites: HashMap<HashKey, StreamBite>,
+    tracker: TcpStream,
+    settings: Settings
+}
+
+impl StreamManager {
+    pub async fn from(tracker_ip: IP, settings: Settings) -> Self {
+        let tracker = TcpStream::connect(settings.tracker).await
+            .expect("Failed to connect to tracker.");
+
+        let stream_bites = HashMap::new();
+
+        Self {stream_bites, tracker, settings}
+    }
 }
 
 

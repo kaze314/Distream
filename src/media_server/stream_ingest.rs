@@ -1,27 +1,33 @@
 
+use std::io::Write;
 use tokio_stream::StreamExt;
 use std::fs::OpenOptions;
 use std::sync::Arc;
+use sha2::{Digest, Sha256};
 use srt_tokio::{SrtListener, SrtSocket};
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
 use tokio::sync::mpsc::Sender;
-use crate::media_server::media_data::STREAM_BITE_SIZE;
+use crate::media_server::media_data::{HashKey, StreamBite, STREAM_BITE_SIZE};
+use crate::media_server::settings::Settings;
 use crate::media_server::stream_manager::ServerEvent;
+use crate::tracker::tracker_connection;
+use crate::tracker::tracker_connection::Message;
 
-async fn start_stream(sender: Sender<ServerEvent>) {
-    let args: Vec<String> = env::args().collect();
+
+pub fn get_stream_bite_hash(stream_bite: &StreamBite) -> HashKey {
+    Sha256::digest(stream_bite).0
 }
-
 
 // This socket is for standard stream ingest from obs or
 // whatever streaming method.
-async fn ingest_traditional() {
+pub async fn ingest_traditional(settings: Settings) {
 
     let port = 3333;
     let (_binding, mut incoming) = SrtListener::builder().bind(port).await.expect("Failed to bind");
 
-    println!("SRT Server is listening on port: {port}");
+    println!("Origin SRT Server is listening on port: {port}");
 
-    let sender_arc = Arc::new(sender);
     while let Some(request) = incoming.incoming().next().await {
         let srt_socket: SrtSocket = request.accept(None).await.expect("Failed to accept socket");
         let client_desc = format!(
@@ -31,14 +37,14 @@ async fn ingest_traditional() {
         );
 
         println!("\nNew client connected: {client_desc}");
-        let sender_copy = sender_arc.clone();
-        tokio::spawn(async move { handle_traditional_stream(sender_copy, srt_socket).await });
+        let settings_clone = settings.clone();
+        tokio::spawn(async move { handle_traditional_stream(srt_socket, settings_clone).await });
     }
 }
 
 async fn handle_traditional_stream(
-    server_data: Arc<Sender<ServerEvent>>,
     mut socket: SrtSocket,
+    settings: Settings,
 ) {
     let client_desc = format!(
         "(ip_port: {}, sockid: {}, streamid: {})",
@@ -51,18 +57,24 @@ async fn handle_traditional_stream(
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open("received_from_obs.ts").expect("Failed to open file.");
+        .open(format!("{}.ts", settings.stream_name)).expect("Failed to open file.");
+
+    let mut tracker_conn = TcpStream::connect(settings.tracker).await
+        .expect("Failed to connect to tracker.");
+
+    tracker_conn.write_u32(Message::CreateStream as u32).await
+        .expect("Failed to create stream with tracker.");
+
+    // Send the name and key
+    tracker_connection::send_string(&mut tracker_conn, &*settings.stream_name).await
+        .expect("Failed to send stream name with tracker.");
+
+    tracker_connection::send_string(&mut tracker_conn, &*settings.stream_password).await
+        .expect("Failed to send stream name with tracker.");
 
     let mut count = 0;
     let mut stream_bite = vec![0u8; STREAM_BITE_SIZE];
 
-    {
-        let mut data = server_data.lock().unwrap();
-        data.new_stream(
-            &"My first stream!".to_string(),
-            "127.0.0.1:3334".to_string()
-        ).expect("Failed to create new stream.");
-    }
 
     while let Some((_instant, bytes)) = socket.try_next().await.unwrap() {
 
@@ -70,14 +82,21 @@ async fn handle_traditional_stream(
         file.write_all(&bytes).expect("Failed to write to file.");
 
         if count + bytes.len() >= STREAM_BITE_SIZE {
-            let hash = DistreamServerData::get_stream_bite_hash(&stream_bite);
-            let mut data = server_data.lock().unwrap();
+            let hash = get_stream_bite_hash(&stream_bite);
 
+            tracker_conn.write_u32(Message::InsertStreamBite as u32).await
+                .expect("Failed to create stream with tracker.");
 
-            data.insert(
-                &"My first stream!".to_string(),
-                stream_bite
-            ).expect("Failed to update insert stream bite");
+            // Send the name and key
+            tracker_connection::send_string(&mut tracker_conn, &*settings.stream_name).await
+                .expect("Failed to send stream name with tracker.");
+
+            tracker_connection::send_string(&mut tracker_conn, &*settings.stream_password).await
+                .expect("Failed to send stream name with tracker.");
+
+            // send hash
+            tracker_conn.write_all(&hash).await.expect("Failed to write to stream.");
+
 
             println!("New stream bite! Hash: {hash:?}");
             stream_bite = vec![0u8; STREAM_BITE_SIZE];

@@ -9,7 +9,7 @@ const MAX_STREAM_NAME_LENGTH: usize = 128;
 const MIN_STREAM_KEY_LENGTH: usize = 32;
 const MAX_STREAM_KEY_LENGTH: usize = 128;
 
-#[repr(u8)]
+#[repr(u32)]
 pub enum Message {
     Fail = 0,
     Understood = 1,
@@ -56,7 +56,7 @@ pub async fn handle_connection(
         }
 
         println!("Received: {:?}", &message_bytes[..read]);
-        let message_id = u32::from_le_bytes(message_bytes);
+        let message_id = u32::from_be_bytes(message_bytes);
         match Message::try_from(message_id) {
             Ok(message) => handle_message(&mut socket, &mut service_channel, message).await,
             Err(()) => println!("Unknown Message"),
@@ -248,7 +248,7 @@ async fn get_string(socket: &mut TcpStream, max_length: usize, min_length: Optio
     Ok(stream_name)
 }
 
-async fn send_string(socket: &mut TcpStream, s: &str) -> Result<(), ()> {
+pub async fn send_string(socket: &mut TcpStream, s: &str) -> Result<(), ()> {
     let bytes = s.as_bytes();
     let length = bytes.len() as u32;
 
