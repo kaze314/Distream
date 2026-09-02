@@ -313,7 +313,7 @@ async fn send_viewer_info(stream: &mut TcpStream, data: &[(IP, HashKey)]) -> std
     Ok(())
 }
 
-async fn recv_viewer_info(stream: &mut TcpStream) -> std::io::Result<Vec<(IP, HashKey)>> {
+pub async fn recv_viewer_info(stream: &mut TcpStream) -> std::io::Result<Vec<(IP, HashKey)>> {
     let count = stream.read_u32().await? as usize;
     let mut result = Vec::with_capacity(count);
 

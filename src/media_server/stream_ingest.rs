@@ -10,14 +10,12 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc::Sender;
 use crate::media_server::media_data::{HashKey, StreamBite, STREAM_BITE_SIZE};
 use crate::media_server::settings::Settings;
-use crate::media_server::stream_manager::ServerEvent;
 use crate::tracker::tracker_connection;
 use crate::tracker::tracker_connection::Message;
+use crate::media_server::stream_manager::StreamManager;
 
 
-pub fn get_stream_bite_hash(stream_bite: &StreamBite) -> HashKey {
-    Sha256::digest(stream_bite).0
-}
+
 
 // This socket is for standard stream ingest from obs or
 // whatever streaming method.
@@ -59,18 +57,9 @@ async fn handle_traditional_stream(
         .append(true)
         .open(format!("{}.ts", settings.stream_name)).expect("Failed to open file.");
 
-    let mut tracker_conn = TcpStream::connect(settings.tracker).await
-        .expect("Failed to connect to tracker.");
+    let mut stream_manager = StreamManager::from(settings).await;
+    stream_manager.register_stream().await;
 
-    tracker_conn.write_u32(Message::CreateStream as u32).await
-        .expect("Failed to create stream with tracker.");
-
-    // Send the name and key
-    tracker_connection::send_string(&mut tracker_conn, &*settings.stream_name).await
-        .expect("Failed to send stream name with tracker.");
-
-    tracker_connection::send_string(&mut tracker_conn, &*settings.stream_password).await
-        .expect("Failed to send stream name with tracker.");
 
     let mut count = 0;
     let mut stream_bite = vec![0u8; STREAM_BITE_SIZE];
@@ -82,21 +71,8 @@ async fn handle_traditional_stream(
         file.write_all(&bytes).expect("Failed to write to file.");
 
         if count + bytes.len() >= STREAM_BITE_SIZE {
-            let hash = get_stream_bite_hash(&stream_bite);
 
-            tracker_conn.write_u32(Message::InsertStreamBite as u32).await
-                .expect("Failed to create stream with tracker.");
-
-            // Send the name and key
-            tracker_connection::send_string(&mut tracker_conn, &*settings.stream_name).await
-                .expect("Failed to send stream name with tracker.");
-
-            tracker_connection::send_string(&mut tracker_conn, &*settings.stream_password).await
-                .expect("Failed to send stream name with tracker.");
-
-            // send hash
-            tracker_conn.write_all(&hash).await.expect("Failed to write to stream.");
-
+            let hash = stream_manager.register_bite(&stream_bite).await;
 
             println!("New stream bite! Hash: {hash:?}");
             stream_bite = vec![0u8; STREAM_BITE_SIZE];
