@@ -24,7 +24,7 @@ pub enum TrackerEvent {
     GetViewerWaitList {
         streamer_ip: IP,
         stream_name: String,
-        oneshot_sender: oneshot::Sender<Vec<(IP, HashKey)>>
+        oneshot_sender: oneshot::Sender<Option<Vec<(IP, HashKey)>>>
     },
     RequestDownload {
         viewer_ip: IP,
@@ -82,7 +82,7 @@ impl TrackerService {
                     stream_name,
                     oneshot_sender
                 } => {
-                    let viewers = self.manager.flush_waitlist(streamer_ip, &stream_name).expect("Error");
+                    let viewers = self.manager.flush_waitlist(streamer_ip, &stream_name);
                     let _ = oneshot_sender.send(viewers);
                 }
             }

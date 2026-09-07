@@ -205,7 +205,7 @@ async fn get_viewer_waitlist_handler(
         None
     ).await.expect("Couldn't get stream name");
 
-    let (tx, rx) = oneshot::channel::<Vec<(IP, HashKey)>>();
+    let (tx, rx) = oneshot::channel::<Option<Vec<(IP, HashKey)>>>();
     let event = TrackerEvent::GetViewerWaitList {
         streamer_ip,
         stream_name,
@@ -215,8 +215,10 @@ async fn get_viewer_waitlist_handler(
     service_channel.send(event).await
         .expect("Failed to get stream bite info.");
 
-    let viewers = rx.await
+    let viewers_option = rx.await
         .expect("Failed to get stream bite info.");
+
+    let viewers = viewers_option.unwrap_or_else(|| Vec::new());
 
     send_viewer_info(socket, viewers.as_slice()).await.unwrap();
 }
