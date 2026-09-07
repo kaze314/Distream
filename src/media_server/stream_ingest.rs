@@ -56,7 +56,7 @@ pub async fn update_stream_loop(stream_manager: Arc<StreamManager>) {
 
 pub async fn download_bite(streamer_ip: IP, hash_original: HashKey) -> (HashKey, StreamBite) {
     println!("Downloading bite from {}", streamer_ip);
-    let port = u16::from_be_bytes(hash_original[0..4].try_into().unwrap());
+    let port = u16::from_be_bytes(hash_original[0..2].try_into().unwrap());
 
     let streamer_ip = format!("{}:{}", streamer_ip.split(":").collect::<Vec<&str>>()[0], port);
     let mut streamer_conn = SrtSocket::builder()
@@ -102,7 +102,7 @@ pub async fn update_viewers_loop(stream_manager: Arc<StreamManager>) {
 
 async fn update_viewer(viewer_ip: IP, stream_bite: Arc<StreamBite>) {
     let hash = StreamManager::get_stream_bite_hash(&stream_bite);
-    let port = u16::from_be_bytes(hash[0..4].try_into().unwrap());
+    let port = u16::from_be_bytes(hash[0..2].try_into().unwrap());
     let viewer_client = format!("{}:{}", viewer_ip.split(":").collect::<Vec<&str>>()[0], port);
     let mut viewer_conn = SrtSocket::builder()
         .local_port(port)
