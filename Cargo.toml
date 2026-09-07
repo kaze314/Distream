@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bytes = "1"
 srt-tokio = "0.4.4"
 sha2 = "0.11.0-rc.3"
 
