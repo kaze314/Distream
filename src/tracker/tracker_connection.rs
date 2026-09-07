@@ -221,7 +221,7 @@ async fn get_viewer_waitlist_handler(
     send_viewer_info(socket, viewers.as_slice()).await.unwrap();
 }
 
-async fn get_string(socket: &mut TcpStream, max_length: usize, min_length: Option<usize>) -> Result<String, ()> {
+pub async fn get_string(socket: &mut TcpStream, max_length: usize, min_length: Option<usize>) -> Result<String, ()> {
     let mut string_length_bytes: [u8; 4] = [0; 4];
     socket.read_exact(&mut string_length_bytes).await
         .expect("Could not read string length");
@@ -275,15 +275,15 @@ async fn send_hash_info(stream: &mut TcpStream, mut data: &[HashKey]) -> std::io
         data = &data[data.len() - 100..];
     }
     stream.write_u32(data.len() as u32).await?;
-    for hashKey in data {
-        stream.write_all(hashKey).await?;
+    for hash_key in data {
+        stream.write_all(hash_key).await?;
     }
 
     Ok(())
 }
 
 // Get information on the last 100 hashes.
-async fn recv_hash_info(stream: &mut TcpStream) -> std::io::Result<Vec<HashKey>> {
+pub async fn recv_hash_info(stream: &mut TcpStream) -> std::io::Result<Vec<HashKey>> {
     let len = stream.read_u32().await? as usize;
     let mut buf = Vec::with_capacity(len);
 
@@ -296,7 +296,6 @@ async fn recv_hash_info(stream: &mut TcpStream) -> std::io::Result<Vec<HashKey>>
     Ok(buf)
 }
 
-// Send information on the last 100 hashes.
 async fn send_viewer_info(stream: &mut TcpStream, data: &[(IP, HashKey)]) -> std::io::Result<()> {
     let mut stream = BufWriter::new(stream);
 

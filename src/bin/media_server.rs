@@ -14,7 +14,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 
 use distream::media_server::media_data::STREAM_BITE_SIZE;
 use distream::tracker::tracker_manager;
-use distream::media_server::settings::process_cmd;
+use distream::media_server::settings::{process_cmd, Settings};
 use distream::media_server::stream_ingest::*;
 
 #[tokio::main]
@@ -27,10 +27,11 @@ async fn main() -> Result<(), Error> {
         ingest_traditional(settings).await;
     }
     else{
-
+        ingest_distream(settings).await;
     }
 
     Ok(())
 }
+
 
 
