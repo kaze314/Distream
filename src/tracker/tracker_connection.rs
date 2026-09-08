@@ -163,7 +163,7 @@ async fn request_download_handler(
     socket: &mut TcpStream,
     service_channel: &mut mpsc::Sender<TrackerEvent>
 ) {
-    let viewer_ip = socket.peer_addr()
+    let mut viewer_ip = socket.peer_addr()
         .expect("Could not get streamer address")
         .to_string();
 
@@ -174,6 +174,13 @@ async fn request_download_handler(
     ).await.expect("Couldn't get stream name");
     let hash = get_hash_key(socket).await;
 
+    let port = get_string(
+        socket,
+        16,
+        None
+    ).await.expect("Couldn't get port number");
+
+    viewer_ip = format!("{}:{}", viewer_ip.split(":").collect::<Vec<&str>>()[0], port);
     let (tx, rx) = oneshot::channel::<IP>();
     let event = TrackerEvent::RequestDownload {
         viewer_ip,

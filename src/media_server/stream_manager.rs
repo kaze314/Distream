@@ -37,7 +37,7 @@ impl StreamManager {
         Self {stream_bites, order, file, settings}
     }
 
-    pub async fn request_download(&self, tracker: &mut TcpStream, hash: &HashKey) -> IP {
+    pub async fn request_download(&self, tracker: &mut TcpStream, port: usize, hash: &HashKey) -> IP {
         tracker.write_u32(Message::RequestDownload as u32).await
             .expect("Failed to get register download.");
 
@@ -45,6 +45,9 @@ impl StreamManager {
             .expect("Failed to send stream name with tracker.");
 
         tracker.write_all(hash).await.expect("Failed to write to stream.");
+
+        tracker_connection::send_string(tracker, &port.to_string()).await
+            .expect("Failed to send port name with tracker.");
 
         let streamer_ip = tracker_connection::get_string(tracker, 100, None).await
             .expect("Failed to get streamer ip.");

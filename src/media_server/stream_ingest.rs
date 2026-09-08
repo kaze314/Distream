@@ -16,6 +16,7 @@ use crate::media_server::settings::Settings;
 use crate::tracker::tracker_connection;
 use crate::tracker::tracker_connection::Message;
 use crate::media_server::stream_manager::StreamManager;
+use crate::media_server::port_pool::PortPool;
 
 const PORT_BASE: u16 = 34554;
 const PORT_COUNT: u16 = 16;
@@ -31,6 +32,7 @@ pub async fn update_file_loop(stream_manager: Arc<StreamManager>) {
 pub async fn update_stream_loop(stream_manager: Arc<StreamManager>) {
     let mut tracker = TcpStream::connect(stream_manager.settings.tracker.clone()).await
         .expect("Failed to connect to tracker.");
+    let port_pool = PortPool::new();
 
     loop {
         let hashes = stream_manager.request_stream_info(&mut tracker).await;
@@ -38,13 +40,16 @@ pub async fn update_stream_loop(stream_manager: Arc<StreamManager>) {
             if stream_manager.stream_bites.read().await.contains_key(&hash) {
                 continue;
             }
+            let port = port_pool.get_new();
 
-            let streamer_ip = stream_manager.request_download(&mut tracker, &hash).await;
+            let streamer_ip = stream_manager.request_download(&mut tracker, port, &hash).await;
             let manager_clone = stream_manager.clone();
             let hash_clone = hash.clone();
+            let port_clone = port_pool.clone();
             tokio::spawn(async move {
                 let (hash, bite) = download_bite(streamer_ip, hash_clone).await;
                 manager_clone.stream_bites.write().await.insert(hash, Arc::new(bite));
+                port_clone.release(port);
             });
 
             let bite = stream_manager.stream_bites.read().await.get(&hash).cloned();
@@ -104,14 +109,10 @@ pub async fn update_viewers_loop(stream_manager: Arc<StreamManager>) {
 }
 
 async fn update_viewer(viewer_ip: IP, stream_bite: Arc<StreamBite>) {
-    let hash = StreamManager::get_stream_bite_hash(&stream_bite);
-    let raw = u16::from_be_bytes(hash[0..2].try_into().unwrap());
-    let port = PORT_BASE + (raw % PORT_COUNT);
-
-    let viewer_client = format!("{}:{}", viewer_ip.split(":").collect::<Vec<&str>>()[0], port);
+    let port = viewer_ip.split(":").collect::<Vec<&str>>()[1];
     let mut viewer_conn = SrtSocket::builder()
-        .local_port(port)
-        .rendezvous(viewer_client)
+        .local_port(port.parse::<u16>().expect("Failed to parse port number"))
+        .rendezvous(viewer_ip)
         .await.expect("Failed to connect to viewer.");
 
     viewer_conn.try_send(Instant::now(), stream_bite.as_slice().copy_to_bytes(stream_bite.len())).expect("TODO: panic message");
