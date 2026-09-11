@@ -11,6 +11,10 @@ pub const STREAM_BITE_SIZE: usize = 500*MAX_PACKET_SIZE;
 
 pub type IP = String;
 
+pub fn short_hash(hash: &HashKey) -> String {
+    hash[..4].iter().map(|b| format!("{b:02x}")).collect()
+}
+
 pub struct MediaStream {
     name: String,
     tracker: IP,

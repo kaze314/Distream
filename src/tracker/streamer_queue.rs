@@ -18,6 +18,10 @@ impl<T> StreamerQueue<T> {
         self.queue.push((0, item));
     }
 
+    pub fn len(&self) -> usize {
+        self.queue.len()
+    }
+
     // It's not guaranteed there will be enough streamers, so
     // instead of permanently removing a streamer from the queue, keep it.
     // If there are not enough streamers for the demand, repeat the queue.

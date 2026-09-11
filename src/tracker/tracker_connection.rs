@@ -10,6 +10,7 @@ const MIN_STREAM_KEY_LENGTH: usize = 32;
 const MAX_STREAM_KEY_LENGTH: usize = 128;
 
 #[repr(u32)]
+#[derive(Debug)]
 pub enum Message {
     Fail = 0,
     Understood = 1,
@@ -46,20 +47,38 @@ pub async fn handle_connection(
     mut service_channel: mpsc::Sender<TrackerEvent>
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut message_bytes = [0; 4];
+    let peer = socket.peer_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_else(|_| "?".to_string());
+
+    println!("[tracker] {peer} connected");
+
+    let mut polls: u64 = 0;
 
     loop {
         let read = socket.read_exact(&mut message_bytes).await?;
 
         if read == 0 {
-            println!("Client disconnected");
+            println!("[tracker] {peer} disconnected");
             return Ok(());
         }
 
-        println!("Received: {:?}", &message_bytes[..read]);
         let message_id = u32::from_be_bytes(message_bytes);
         match Message::try_from(message_id) {
-            Ok(message) => handle_message(&mut socket, &mut service_channel, message).await,
-            Err(()) => println!("Unknown Message"),
+            Ok(message) => {
+                if matches!(message, Message::RequestStreamInfo | Message::RequestViewerWaitlist) {
+                    polls += 1;
+                    if polls % 1000 == 0 {
+                        println!("[tracker] {peer} polled {polls} times");
+                    }
+                }
+                else {
+                    println!("[tracker] {peer} -> {message:?}");
+                }
+
+                handle_message(&mut socket, &mut service_channel, message).await
+            },
+            Err(()) => println!("[tracker] {peer} -> unknown message id {message_id}"),
         }
 
     }
@@ -86,6 +105,8 @@ async fn create_stream_handler(
     service_channel: &mut mpsc::Sender<TrackerEvent>
 ) {
     let (stream_name, stream_key) = get_name_and_key(socket).await;
+    println!("[tracker]   create stream '{stream_name}' (key {} chars)", stream_key.len());
+
     let event = TrackerEvent::NewStream {
         stream_name: stream_name,
         key: stream_key,
@@ -100,6 +121,8 @@ async fn insert_stream_bite_handler(
 ) {
     let (stream_name, stream_key) = get_name_and_key(socket).await;
     let hash = get_hash_key(socket).await;
+    println!("[tracker]   bite {} for '{stream_name}'", short_hash(&hash));
+
     let event = TrackerEvent::UploadBiteInfo {
         stream_name: stream_name,
         key: stream_key,
@@ -113,9 +136,7 @@ async fn register_streamer_handler(
     socket: &mut TcpStream,
     service_channel: &mut mpsc::Sender<TrackerEvent>
 ) {
-    let streamer_ip = socket.peer_addr()
-        .expect("Could not get streamer address")
-        .to_string();
+    let streamer_ip = streamer_key(socket);
 
     let stream_name = get_string(
         socket,
@@ -124,6 +145,8 @@ async fn register_streamer_handler(
     ).await.expect("Couldn't get stream name");
 
     let hash = get_hash_key(socket).await;
+    println!("[tracker]   {streamer_ip} serves {} of '{stream_name}'", short_hash(&hash));
+
     let event = TrackerEvent::RegisterStreamer {
         streamer_ip,
         stream_name,
@@ -145,7 +168,7 @@ async fn request_stream_info_handler(
 
     let (tx, rx) = oneshot::channel::<Option<Vec<HashKey>>>();
     let event = TrackerEvent::GetStreamBiteInfo {
-        stream_name,
+        stream_name: stream_name.clone(),
         oneshot_sender: tx,
     };
 
@@ -163,9 +186,7 @@ async fn request_download_handler(
     socket: &mut TcpStream,
     service_channel: &mut mpsc::Sender<TrackerEvent>
 ) {
-    let mut viewer_ip = socket.peer_addr()
-        .expect("Could not get streamer address")
-        .to_string();
+    let viewer_host = peer_host(socket);
 
     let stream_name = get_string(
         socket,
@@ -180,8 +201,10 @@ async fn request_download_handler(
         None
     ).await.expect("Couldn't get port number");
 
-    viewer_ip = format!("{}:{}", viewer_ip.split(":").collect::<Vec<&str>>()[0], port);
-    let (tx, rx) = oneshot::channel::<IP>();
+    let viewer_ip = format!("{viewer_host}:{port}");
+    println!("[tracker]   {viewer_ip} wants {} of '{stream_name}'", short_hash(&hash));
+
+    let (tx, rx) = oneshot::channel::<Option<IP>>();
     let event = TrackerEvent::RequestDownload {
         viewer_ip,
         stream_name,
@@ -195,16 +218,25 @@ async fn request_download_handler(
     let streamer_ip = rx.await
         .expect("Failed to get stream bite info.");
 
-    send_string(socket, &*streamer_ip).await.expect("Couldn't send streamer.");
+    // An empty reply means nobody is serving it yet. The viewer retries on
+    // its next poll, so this is a normal answer rather than an error.
+    match streamer_ip {
+        Some(ip) => {
+            println!("[tracker]   sending them to {ip}");
+            send_string(socket, &*ip).await.expect("Couldn't send streamer.");
+        }
+        None => {
+            println!("[tracker]   no source for it yet");
+            send_string(socket, "").await.expect("Couldn't send streamer.");
+        }
+    }
 }
 
 async fn get_viewer_waitlist_handler(
     socket: &mut TcpStream,
     service_channel: &mut mpsc::Sender<TrackerEvent>
 ) {
-    let streamer_ip = socket.peer_addr()
-        .expect("Could not get streamer address")
-        .to_string();
+    let streamer_ip = streamer_key(socket);
 
     let stream_name = get_string(
         socket,
@@ -214,7 +246,7 @@ async fn get_viewer_waitlist_handler(
 
     let (tx, rx) = oneshot::channel::<Option<Vec<(IP, HashKey)>>>();
     let event = TrackerEvent::GetViewerWaitList {
-        streamer_ip,
+        streamer_ip: streamer_ip.clone(),
         stream_name,
         oneshot_sender: tx,
     };
@@ -226,8 +258,32 @@ async fn get_viewer_waitlist_handler(
         .expect("Failed to get stream bite info.");
 
     let viewers = viewers_option.unwrap_or_else(|| Vec::new());
+    if !viewers.is_empty() {
+        println!("[tracker]   {streamer_ip} owes {} viewer(s)", viewers.len());
+        for (ip, hash) in &viewers {
+            println!("[tracker]     {ip} needs {}", short_hash(hash));
+        }
+    }
 
     send_viewer_info(socket, viewers.as_slice()).await.unwrap();
+}
+
+// Identity of the peer on the other end. The port is part of it on purpose:
+// the host alone cannot tell an origin from a relay running beside it, and
+// they would then eat each other's waitlists. Peers keep one connection for
+// RegisterStreamer and RequestViewerWaitlist so this stays stable.
+fn streamer_key(socket: &TcpStream) -> IP {
+    socket.peer_addr()
+        .expect("Could not get peer address")
+        .to_string()
+}
+
+// Just the address, for building somewhere to dial.
+fn peer_host(socket: &TcpStream) -> IP {
+    socket.peer_addr()
+        .expect("Could not get peer address")
+        .ip()
+        .to_string()
 }
 
 pub async fn get_string(socket: &mut TcpStream, max_length: usize, min_length: Option<usize>) -> Result<String, ()> {

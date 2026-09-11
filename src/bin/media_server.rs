@@ -22,11 +22,14 @@ async fn main() -> Result<(), Error> {
 
     let settings = process_cmd();
     println!("{:#?}", settings);
+    println!("bite size: {STREAM_BITE_SIZE} bytes");
 
     if settings.is_origin {
+        println!("mode: origin (taking SRT in on 3333)");
         ingest_traditional(settings).await;
     }
     else{
+        println!("mode: peer (pulling from the swarm)");
         ingest_distream(settings).await;
     }
 

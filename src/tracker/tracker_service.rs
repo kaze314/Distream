@@ -30,7 +30,7 @@ pub enum TrackerEvent {
         viewer_ip: IP,
         stream_name: String,
         hash: HashKey,
-        oneshot_sender: oneshot::Sender<IP>
+        oneshot_sender: oneshot::Sender<Option<IP>>
     }
 }
 
@@ -54,6 +54,7 @@ impl TrackerService {
             match event {
                 TrackerEvent::NewStream { stream_name, key } => {
                     self.manager.create_stream(stream_name, key);
+                    println!("[svc] streams live: {}", self.manager.current_streams.len());
                 }
                 TrackerEvent::GetStreamBiteInfo { stream_name, oneshot_sender } => {
                     let stream_bites = self.manager.get_stream_bites(stream_name);
@@ -74,8 +75,8 @@ impl TrackerService {
                     hash,
                     oneshot_sender
                 } => {
-                    let ip = self.manager.get_streamer(viewer_ip, &stream_name, hash).expect("Error");
-                    let _ = oneshot_sender.send(ip.clone());
+                    let ip = self.manager.get_streamer(viewer_ip, &stream_name, hash).cloned();
+                    let _ = oneshot_sender.send(ip);
                 }
                 TrackerEvent::GetViewerWaitList {
                     streamer_ip,
