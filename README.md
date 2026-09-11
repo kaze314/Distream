@@ -6,7 +6,7 @@ Distream is a P2P live streaming network POC. It allows users to view and create
 Distream consists of two components, a tracker and a media server.
 
 ## Tracker
-The tracker is responsible for facilitating the connection between viewers(clients who are requesting a piece of the stream) and streamers(clients with the video). The tracker never sends or receives any data from the stream. It receives the hash of a stream bite(an arbitrary number of MPEG packets) and contains a list of viewers and streamers. There are a few main interfaces the media server can access:
+The tracker is responsible for facilitating the connection between viewers (clients who are requesting a piece of the stream) and streamers (clients with the video). The tracker never sends or receives any data from the stream. It receives the hash of a stream bite (an arbitrary number of MPEG packets) and contains a list of viewers and streamers. There are a few main interfaces the media server can access:
 
  - **NewStream** - Called once by the owner of the stream.
  - **GetStreamBiteInfo** - Used by viewers to get the list of hashes
@@ -16,19 +16,19 @@ The tracker is responsible for facilitating the connection between viewers(clien
  - **RequestDownload** - Request a stream bite from a streamer.
 
 ## Media Server
-The media server handles sending and receiving of stream bites. Depending on the users settings, the media server will serve different functions. If the user wants to create a new stream, a new connection will be created for a broadcast app such as OBS to receive the stream data. If the user wants to watch the live stream in VLC. A UDP live stream will be created witch sends pieces of the stream. In all cases, the media server will communicate with the tracker using the interfaces listed above to distribute the stream.
+The media server handles sending and receiving of stream bites. Depending on the user's settings, the media server will serve different functions. If the user wants to create a new stream, a new connection will be created for a broadcast app such as OBS to receive the stream data. If the user wants to watch the live stream in VLC. A UDP live stream will be created which sends pieces of the stream. In all cases, the media server will communicate with the tracker using the interfaces listed above to distribute the stream.
 
-The connection from the broadcast app and to other peers uses the [SRT](https://github.com/Haivision/srt)  protocol. SRT was found to be a strong choice due to its ability to ensure reliability without stalling the system. Its NAT traversal in rendezvous mode was essential to ensuring accessibly. 
+The connection from the broadcast app and to other peers uses the [SRT](https://github.com/Haivision/srt) protocol. SRT was found to be a strong choice due to its ability to ensure reliability without stalling the system. Its NAT traversal in rendezvous mode was essential to ensuring accessibility. 
 
 # Usage
-Distream can be downloaded and ran in the command line. 
+Distream can be downloaded and run in the command line. 
 
 Build the project with:
 ```bash
 cargo build
 ```
 ### Tracker
-The tracker can be ran with:
+The tracker can be run with:
 ```bash
 cargo run --bin tracker
 ```
@@ -55,4 +55,4 @@ cargo run --bin media_server -- --tracker IP:PORT --name STREAM_NAME --ports 346
 **--play**  will create a UDP live stream which you can watch with VLC on ``udp://@:1234``
 
 ## Disclaimer
-This project exists as a proof-of-concept. Large scale usage across multiple networks has not been tested. Security was not a focus when distream was designed, there are likely flaws that an attacker can exploit, both on the program and design level. There are several improvements that can be made to support streams with a large amount (>1000) of viewers however they are out of the scope of what I wanted to achieve.
+This project exists as a proof-of-concept. Large scale usage across multiple networks has not been tested. Security was not a focus when distream was designed, and there are likely flaws that an attacker can exploit, both on the program and design level. There are several improvements that can be made to support streams with a large amount (>1000) of viewers however they are out of the scope of what I wanted to achieve.
