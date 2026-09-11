@@ -1,22 +1,18 @@
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::io::{Bytes, Read};
+use std::io::Read;
 use std::sync::Arc;
-use std::time::Instant;
-use bytes::Buf;
 use sha2::{Digest, Sha256};
-use srt_tokio::SrtSocket;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
-use tokio::sync::mpsc::Receiver;
 use tokio::sync::{Mutex, RwLock};
 use crate::media_server::media_data::{short_hash, HashKey, StreamBite, IP};
 use crate::media_server::playout::playout_loop;
 use crate::media_server::settings::Settings;
 use crate::tracker::tracker_connection::Message;
-use crate::tracker::{tracker_connection, tracker_manager};
+use crate::tracker::tracker_connection;
 
 pub struct StreamManager {
     pub stream_bites: Arc<RwLock<HashMap<HashKey, Arc<StreamBite>>>>,
